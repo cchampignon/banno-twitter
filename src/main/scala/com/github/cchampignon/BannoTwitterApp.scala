@@ -12,38 +12,40 @@ import akka.stream.Materializer
 import akka.stream.Supervision.resumingDecider
 import akka.stream.scaladsl.{Sink, Source}
 import akka.stream.typed.scaladsl.ActorSink
-import akka.util.{ByteString, Timeout}
+import akka.util.ByteString
 import akka.{NotUsed, actor}
 import com.github.cchampignon.Main.jsonStreamingSupport
 import com.github.cchampignon.actors.CountActor
+import com.github.cchampignon.http.RestService
 
 import scala.concurrent.ExecutionContextExecutor
-import scala.concurrent.duration._
+
 
 object BannoTwitterApp extends App {
-  val as = ActorSystem(Main(), "BannoTwitter")
+  val as: ActorSystem[NotUsed] = ActorSystem(Main(), "BannoTwitter")
 }
 
 object Main {
 
   private val sameStreamUrl = "https://stream.twitter.com/1.1/statuses/sample.json"
   implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json(32 * 1024)
-  implicit val timeout: Timeout = 3.seconds
 
   def apply(): Behavior[NotUsed] =
     Behaviors.setup { context =>
+      implicit val system: ActorSystem[Nothing] = context.system
+      implicit val ec: ExecutionContextExecutor = context.system.executionContext
+
       val count: ActorRef[CountActor.Command] = spawnAndWatchActor(context, CountActor(), "count")
 
-      implicit val untypedSystem: actor.ActorSystem = context.system.toClassic
-      implicit val ec: ExecutionContextExecutor = context.system.executionContext
+      RestService.start(count)
 
       Oauth.withOauthHeader(HttpRequest(uri = sameStreamUrl)) match {
         case Some(request) =>
-          val responseFuture = Http(untypedSystem).singleRequest(request)
+          val responseFuture = Http(context.system.toClassic).singleRequest(request)
           responseFuture.map { response =>
             val sink: Sink[CountActor.Command, NotUsed] = ActorSink.actorRef(count, CountActor.Complete, CountActor.Fail.apply)
 
-            TweetProcessingStream.build(response.entity.dataBytes).runWith(sink)
+            TweetProcessingStream.build(response.entity.withoutSizeLimit.dataBytes).runWith(sink)
           }
         case None =>
           println("System properties for twitter Oauth must be set.")
