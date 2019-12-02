@@ -15,7 +15,7 @@ class CountActorSpec extends AnyWordSpec
 
 
   "A Count Actor" should {
-    "Reply with a count of zero when no increment message have been received" in {
+    "reply with a count of zero when no increment message have been received" in {
       val count: ActorRef[CountActor.Command] = testKit.spawn(CountActor())
       val probe = testKit.createTestProbe[CountActor.Count]()
 
@@ -23,7 +23,7 @@ class CountActorSpec extends AnyWordSpec
       probe.expectMessage(CountActor.Count(0))
     }
 
-    "Reply with an accurate count when queried" in {
+    "reply with an accurate count when queried" in {
       val count: ActorRef[CountActor.Command] = testKit.spawn(CountActor())
       val probe = testKit.createTestProbe[CountActor.Count]()
 

@@ -11,13 +11,13 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.stream.Materializer
 import akka.util.Timeout
-import com.github.cchampignon.actors.CountActor
+import com.github.cchampignon.actors.{CountActor, EmojiActor}
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
 object RestService {
-  def start(countActor: ActorRef[CountActor.Command])(implicit system: ActorSystem[Nothing], mat: Materializer) = {
+  def start(countActor: ActorRef[CountActor.Command], emojiActor: ActorRef[EmojiActor.Command])(implicit system: ActorSystem[Nothing], mat: Materializer) = {
     implicit val classicSystem: actor.ActorSystem = system.toClassic
     implicit val executionContext: ExecutionContextExecutor = system.toClassic.dispatcher
     implicit val s: Scheduler = system.toClassic.scheduler
@@ -28,11 +28,24 @@ object RestService {
         get {
           complete{
             (countActor ? CountActor.GetCount).mapTo[CountActor.Count].map { count =>
-              HttpEntity(ContentTypes.`text/html(UTF-8)`, s"Processed $count tweets.")
+              HttpEntity(s"Processed $count tweets.")
             }
           }
         }
-      }
+      } ~
+        path("emoji") {
+          get {
+            complete{
+              for {
+                percentage <- (emojiActor ? EmojiActor.GetEmojiPercentage).mapTo[EmojiActor.Percentage]
+                top <- (emojiActor ? (replyTo => EmojiActor.GetTopEmojis(10, replyTo))).mapTo[EmojiActor.Top]
+              } yield {
+                val emojis = top.tops.map(_.getUnicode).mkString("\r\n")
+                HttpEntity(s"${percentage.value*100}% of tweets have emojis.\r\nThe top emojis are \r\n$emojis")
+              }
+            }
+          }
+        }
 
     val bindingFuture = Http().bindAndHandle(route, "localhost", 8080)
   }
