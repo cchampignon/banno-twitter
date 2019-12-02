@@ -8,8 +8,8 @@ libraryDependencies ++= Seq(
   "com.twitter" % "hbc-core" % "2.2.0",
   "com.typesafe.akka" %% "akka-stream-typed" % "2.6.0",
   "com.typesafe.akka" %% "akka-actor-typed" % "2.6.0",
-  "com.typesafe.akka" %% "akka-http" % "10.1.10",
-  "com.typesafe.akka" %% "akka-http-spray-json" % "10.1.10",
+  "com.typesafe.akka" %% "akka-http" % "10.1.11",
+  "com.typesafe.akka" %% "akka-http-spray-json" % "10.1.11",
   "com.vdurmont" % "emoji-java" % "5.1.1",
   "io.lemonlabs" %% "scala-uri" % "1.5.1",
 
