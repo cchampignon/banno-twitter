@@ -39,8 +39,9 @@ object Main {
 
       val count: ActorRef[CountActor.Command] = spawnAndWatchActor(context, CountActor(), "count")
       val emoji: ActorRef[StatActor.Command[Emoji]] = spawnAndWatchActor(context, StatActor[Emoji](count), "emoji")
+      val hashtag: ActorRef[StatActor.Command[Hashtag]] = spawnAndWatchActor(context, StatActor[Hashtag](count), "hashtag")
 
-      RestService.start(count, emoji)
+      RestService.start(count, emoji, hashtag)
 
       Oauth.withOauthHeader(HttpRequest(uri = sameStreamUrl)) match {
         case Some(request) =>
@@ -50,6 +51,7 @@ object Main {
             val combinedSink = Sink.combine(
               TweetProcessingStream.createCountSink(count),
               TweetProcessingStream.createEmojiSink(emoji),
+              TweetProcessingStream.createHashtagSink(hashtag),
             )(Broadcast[Tweet](_))
 
             TweetProcessingStream.build(response.entity.withoutSizeLimit.dataBytes).runWith(combinedSink)
@@ -79,19 +81,24 @@ object TweetProcessingStream {
     .mapAsync(1)(bytes => Unmarshal(bytes).to[Tweet])
     .withAttributes(supervisionStrategy(resumingDecider)) // Resume stream, instead of terminating, if message is not a tweet
 
-  def createCountSink(countActor: ActorRef[CountActor.Command]) = {
-    val sink: Sink[CountActor.Command, NotUsed] = ActorSink.actorRef(countActor, CountActor.Complete, CountActor.Fail.apply)
-    val countMap = Flow[Tweet].map(_ => CountActor.Increment)
-    countMap.to(sink)
-  }
+  def createCountSink(countActor: ActorRef[CountActor.Command]): Sink[Tweet, NotUsed] =
+    createActorRefSink(countActor, CountActor.Complete, CountActor.Fail.apply)(_ => CountActor.Increment)
 
-  def createEmojiSink(emojiActor: ActorRef[StatActor.Command[Emoji]]) = {
-    val sink = ActorSink.actorRef[StatActor.Command[Emoji]](emojiActor, StatActor.Complete(), StatActor.Fail.apply)
-    val countMap = Flow[Tweet].map { tweet =>
+  def createEmojiSink(emojiActor: ActorRef[StatActor.Command[Emoji]]): Sink[Tweet, NotUsed] =
+    createActorRefSink[StatActor.Command[Emoji]](emojiActor, StatActor.Complete(), StatActor.Fail.apply) { tweet =>
       val emojisUnicodes = EmojiParser.extractEmojis(tweet.text)
       //TODO: investigate bug in Emoji lib parsing. For now use Option.apply to ignore the null
       StatActor.AddTsFromTweet(emojisUnicodes.asScala.toList.flatMap(e => Option(EmojiManager.getByUnicode(e))))
     }
+
+  def createHashtagSink(hashtagActor: ActorRef[StatActor.Command[Hashtag]]): Sink[Tweet, NotUsed] =
+    createActorRefSink[StatActor.Command[Hashtag]](hashtagActor, StatActor.Complete(), StatActor.Fail.apply) { tweet =>
+      StatActor.AddTsFromTweet(tweet.entities.hashtags)
+    }
+
+  def createActorRefSink[T](actor: ActorRef[T], onComplete: T, onFailure: Throwable => T)(f: Tweet => T): Sink[Tweet, NotUsed] = {
+    val sink = ActorSink.actorRef[T](actor, onComplete, onFailure)
+    val countMap = Flow[Tweet].map(f)
     countMap.to(sink)
   }
 }

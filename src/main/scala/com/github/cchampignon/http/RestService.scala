@@ -11,6 +11,7 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.stream.Materializer
 import akka.util.Timeout
+import com.github.cchampignon.Hashtag
 import com.github.cchampignon.actors.{CountActor, StatActor}
 import com.vdurmont.emoji.Emoji
 
@@ -18,7 +19,11 @@ import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 
 object RestService {
-  def start(countActor: ActorRef[CountActor.Command], emojiActor: ActorRef[StatActor.Command[Emoji]])(implicit system: ActorSystem[Nothing], mat: Materializer) = {
+  def start(
+             countActor: ActorRef[CountActor.Command],
+             emojiActor: ActorRef[StatActor.Command[Emoji]],
+             hashtagActor: ActorRef[StatActor.Command[Hashtag]],
+           )(implicit system: ActorSystem[Nothing], mat: Materializer) = {
     implicit val classicSystem: actor.ActorSystem = system.toClassic
     implicit val executionContext: ExecutionContextExecutor = system.toClassic.dispatcher
     implicit val s: Scheduler = system.toClassic.scheduler
@@ -27,7 +32,7 @@ object RestService {
     val route: Route =
       path("count") {
         get {
-          complete{
+          complete {
             (countActor ? CountActor.GetCount).mapTo[CountActor.Count].map { count =>
               HttpEntity(s"Processed $count tweets.")
             }
@@ -36,13 +41,23 @@ object RestService {
       } ~
         path("emoji") {
           get {
-            complete{
+            complete {
               for {
                 percentage <- (emojiActor ? StatActor.GetPercentage[Emoji]).mapTo[StatActor.Percentage[Emoji]]
                 top <- (emojiActor ? (replyTo => StatActor.GetTop[Emoji](10, replyTo))).mapTo[StatActor.Top[Emoji]]
               } yield {
                 val emojis = top.tops.map(_.getUnicode).mkString("\r\n")
-                HttpEntity(s"${percentage.value*100}% of tweets have emojis.\r\nThe top emojis are \r\n$emojis")
+                HttpEntity(s"${percentage.value * 100}% of tweets have emojis.\r\nThe top emojis are \r\n$emojis")
+              }
+            }
+          }
+        } ~
+        path("hashtag") {
+          get {
+            complete {
+              (hashtagActor ? (replyTo => StatActor.GetTop[Hashtag](10, replyTo))).mapTo[StatActor.Top[Hashtag]].map { top =>
+                val hashtag = top.tops.map(_.text).mkString("\r\n#")
+                HttpEntity(s"The top hashtags are:\r\n#$hashtag")
               }
             }
           }
