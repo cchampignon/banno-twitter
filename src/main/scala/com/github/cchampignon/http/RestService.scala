@@ -14,6 +14,7 @@ import akka.util.Timeout
 import com.github.cchampignon.{Hashtag, Media, Url}
 import com.github.cchampignon.actors.{CountActor, StatActor}
 import com.vdurmont.emoji.Emoji
+import io.lemonlabs.uri.Host
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
@@ -25,6 +26,7 @@ object RestService {
              hashtagActor: ActorRef[StatActor.Command[Hashtag]],
              urlActor: ActorRef[StatActor.Command[Url]],
              mediaActor: ActorRef[StatActor.Command[Media]],
+             domainActor: ActorRef[StatActor.Command[Host]],
            )(implicit system: ActorSystem[Nothing], mat: Materializer) = {
     implicit val classicSystem: actor.ActorSystem = system.toClassic
     implicit val executionContext: ExecutionContextExecutor = system.toClassic.dispatcher
@@ -78,6 +80,16 @@ object RestService {
             complete {
               (mediaActor ? StatActor.GetPercentage[Media]).mapTo[StatActor.Percentage[Media]].map { percentage =>
                 HttpEntity(s"${percentage.value * 100}% of tweets contain photo urls")
+              }
+            }
+          }
+        } ~
+        path("domain") {
+          get {
+            complete {
+              (domainActor ? (replyTo => StatActor.GetTop[Host](10, replyTo))).mapTo[StatActor.Top[Host]].map { top =>
+                val domain = top.tops.map(_.toString()).mkString("\r\n")
+                HttpEntity(s"The top domains are:\r\n$domain")
               }
             }
           }

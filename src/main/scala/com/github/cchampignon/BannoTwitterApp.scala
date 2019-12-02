@@ -18,6 +18,7 @@ import com.github.cchampignon.Main.jsonStreamingSupport
 import com.github.cchampignon.actors.{CountActor, StatActor}
 import com.github.cchampignon.http.RestService
 import com.vdurmont.emoji.{Emoji, EmojiManager, EmojiParser}
+import io.lemonlabs.uri.{Host, Uri}
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.jdk.CollectionConverters._
@@ -42,8 +43,9 @@ object Main {
       val hashtag: ActorRef[StatActor.Command[Hashtag]] = spawnAndWatchActor(context, StatActor[Hashtag](count), "hashtag")
       val url: ActorRef[StatActor.Command[Url]] = spawnAndWatchActor(context, StatActor[Url](count), "url")
       val media: ActorRef[StatActor.Command[Media]] = spawnAndWatchActor(context, StatActor[Media](count), "media")
+      val domain: ActorRef[StatActor.Command[Host]] = spawnAndWatchActor(context, StatActor[Host](count), "domain")
 
-      RestService.start(count, emoji, hashtag, url, media)
+      RestService.start(count, emoji, hashtag, url, media, domain)
 
       Oauth.withOauthHeader(HttpRequest(uri = sameStreamUrl)) match {
         case Some(request) =>
@@ -57,6 +59,7 @@ object Main {
               TweetProcessingStream.createUrlSink(url),
               TweetProcessingStream.createUrlSink(url),
               TweetProcessingStream.createMediaSink(media),
+              TweetProcessingStream.createDomainSink(domain),
             )(Broadcast[Tweet](_))
 
             TweetProcessingStream.build(response.entity.withoutSizeLimit.dataBytes).runWith(combinedSink)
@@ -111,6 +114,11 @@ object TweetProcessingStream {
       //If media exists tweet has photo URL
       //TODO: investigate expanded_entities which may give all photo urls. This will allow accurate top counts, which is out of scope for the exercise
       StatActor.AddTsFromTweet(tweet.entities.media.toSeq.flatten)
+    }
+
+  def createDomainSink(domainActor: ActorRef[StatActor.Command[Host]]): Sink[Tweet, NotUsed] =
+    createActorRefSink[StatActor.Command[Host]](domainActor, StatActor.Complete(), StatActor.Fail.apply) { tweet =>
+      StatActor.AddTsFromTweet(tweet.entities.urls.flatMap(url => Uri.parse(url.expanded_url).toUrl.hostOption))
     }
 
   def createActorRefSink[T](actor: ActorRef[T], onComplete: T, onFailure: Throwable => T)(f: Tweet => T): Sink[Tweet, NotUsed] = {

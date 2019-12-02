@@ -9,7 +9,7 @@ case class Entities(hashtags: List[Hashtag], urls: List[Url], media: Option[List
 
 case class Hashtag(text: String)
 
-case class Url(url: String)
+case class Url(expanded_url: String)
 
 case class Media(url: String)
 
