@@ -15,9 +15,9 @@ import akka.stream.typed.scaladsl.ActorSink
 import akka.util.ByteString
 import akka.{NotUsed, actor}
 import com.github.cchampignon.Main.jsonStreamingSupport
-import com.github.cchampignon.actors.{CountActor, EmojiActor}
+import com.github.cchampignon.actors.{CountActor, StatActor}
 import com.github.cchampignon.http.RestService
-import com.vdurmont.emoji.{EmojiManager, EmojiParser}
+import com.vdurmont.emoji.{Emoji, EmojiManager, EmojiParser}
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.jdk.CollectionConverters._
@@ -38,7 +38,7 @@ object Main {
       implicit val ec: ExecutionContextExecutor = context.system.executionContext
 
       val count: ActorRef[CountActor.Command] = spawnAndWatchActor(context, CountActor(), "count")
-      val emoji: ActorRef[EmojiActor.Command] = spawnAndWatchActor(context, EmojiActor(count), "emoji")
+      val emoji: ActorRef[StatActor.Command[Emoji]] = spawnAndWatchActor(context, StatActor[Emoji](count), "emoji")
 
       RestService.start(count, emoji)
 
@@ -85,12 +85,12 @@ object TweetProcessingStream {
     countMap.to(sink)
   }
 
-  def createEmojiSink(emojiActor: ActorRef[EmojiActor.Command]) = {
-    val sink: Sink[EmojiActor.Command, NotUsed] = ActorSink.actorRef(emojiActor, EmojiActor.Complete, EmojiActor.Fail.apply)
+  def createEmojiSink(emojiActor: ActorRef[StatActor.Command[Emoji]]) = {
+    val sink = ActorSink.actorRef[StatActor.Command[Emoji]](emojiActor, StatActor.Complete(), StatActor.Fail.apply)
     val countMap = Flow[Tweet].map { tweet =>
       val emojisUnicodes = EmojiParser.extractEmojis(tweet.text)
       //TODO: investigate bug in Emoji lib parsing. For now use Option.apply to ignore the null
-      EmojiActor.AddEmojisFromTweet(emojisUnicodes.asScala.toList.flatMap(e => Option(EmojiManager.getByUnicode(e))))
+      StatActor.AddTsFromTweet(emojisUnicodes.asScala.toList.flatMap(e => Option(EmojiManager.getByUnicode(e))))
     }
     countMap.to(sink)
   }
