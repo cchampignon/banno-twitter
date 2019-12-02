@@ -37,8 +37,11 @@ object RestService {
       path("count") {
         get {
           complete {
-            (countActor ? CountActor.GetCount).mapTo[CountActor.Count].map { count =>
-              HttpEntity(s"Processed $count tweets.")
+            for {
+              count <- (countActor ? CountActor.GetCount).mapTo[CountActor.Count]
+              averages <- (countActor ? CountActor.GetAverages).mapTo[CountActor.Averages]
+            } yield {
+              HttpEntity(s"Processed $count tweets.\r\nAverage tweets per hour: ${averages.hour}\r\nAverage tweets per minute: ${averages.minute}\r\nAverage tweets per second: ${averages.second}")
             }
           }
         }
