@@ -41,8 +41,9 @@ object Main {
       val emoji: ActorRef[StatActor.Command[Emoji]] = spawnAndWatchActor(context, StatActor[Emoji](count), "emoji")
       val hashtag: ActorRef[StatActor.Command[Hashtag]] = spawnAndWatchActor(context, StatActor[Hashtag](count), "hashtag")
       val url: ActorRef[StatActor.Command[Url]] = spawnAndWatchActor(context, StatActor[Url](count), "url")
+      val media: ActorRef[StatActor.Command[Media]] = spawnAndWatchActor(context, StatActor[Media](count), "media")
 
-      RestService.start(count, emoji, hashtag, url)
+      RestService.start(count, emoji, hashtag, url, media)
 
       Oauth.withOauthHeader(HttpRequest(uri = sameStreamUrl)) match {
         case Some(request) =>
@@ -54,6 +55,8 @@ object Main {
               TweetProcessingStream.createEmojiSink(emoji),
               TweetProcessingStream.createHashtagSink(hashtag),
               TweetProcessingStream.createUrlSink(url),
+              TweetProcessingStream.createUrlSink(url),
+              TweetProcessingStream.createMediaSink(media),
             )(Broadcast[Tweet](_))
 
             TweetProcessingStream.build(response.entity.withoutSizeLimit.dataBytes).runWith(combinedSink)
@@ -98,9 +101,16 @@ object TweetProcessingStream {
       StatActor.AddTsFromTweet(tweet.entities.hashtags)
     }
 
-  def createUrlSink(hashtagActor: ActorRef[StatActor.Command[Url]]): Sink[Tweet, NotUsed] =
-    createActorRefSink[StatActor.Command[Url]](hashtagActor, StatActor.Complete(), StatActor.Fail.apply) { tweet =>
+  def createUrlSink(urlActor: ActorRef[StatActor.Command[Url]]): Sink[Tweet, NotUsed] =
+    createActorRefSink[StatActor.Command[Url]](urlActor, StatActor.Complete(), StatActor.Fail.apply) { tweet =>
       StatActor.AddTsFromTweet(tweet.entities.urls)
+    }
+
+  def createMediaSink(mediaActor: ActorRef[StatActor.Command[Media]]): Sink[Tweet, NotUsed] =
+    createActorRefSink[StatActor.Command[Media]](mediaActor, StatActor.Complete(), StatActor.Fail.apply) { tweet =>
+      //If media exists tweet has photo URL
+      //TODO: investigate expanded_entities which may give all photo urls. This will allow accurate top counts, which is out of scope for the exercise
+      StatActor.AddTsFromTweet(tweet.entities.media.toSeq.flatten)
     }
 
   def createActorRefSink[T](actor: ActorRef[T], onComplete: T, onFailure: Throwable => T)(f: Tweet => T): Sink[Tweet, NotUsed] = {

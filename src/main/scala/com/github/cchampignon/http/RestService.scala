@@ -11,7 +11,7 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.stream.Materializer
 import akka.util.Timeout
-import com.github.cchampignon.{Hashtag, Url}
+import com.github.cchampignon.{Hashtag, Media, Url}
 import com.github.cchampignon.actors.{CountActor, StatActor}
 import com.vdurmont.emoji.Emoji
 
@@ -24,6 +24,7 @@ object RestService {
              emojiActor: ActorRef[StatActor.Command[Emoji]],
              hashtagActor: ActorRef[StatActor.Command[Hashtag]],
              urlActor: ActorRef[StatActor.Command[Url]],
+             mediaActor: ActorRef[StatActor.Command[Media]],
            )(implicit system: ActorSystem[Nothing], mat: Materializer) = {
     implicit val classicSystem: actor.ActorSystem = system.toClassic
     implicit val executionContext: ExecutionContextExecutor = system.toClassic.dispatcher
@@ -67,7 +68,16 @@ object RestService {
           get {
             complete {
               (urlActor ? StatActor.GetPercentage[Url]).mapTo[StatActor.Percentage[Url]].map { percentage =>
-                HttpEntity(s"${percentage.value * 100}% of tweets have urls")
+                HttpEntity(s"${percentage.value * 100}% of tweets contain urls")
+              }
+            }
+          }
+        } ~
+        path("photourl") {
+          get {
+            complete {
+              (mediaActor ? StatActor.GetPercentage[Media]).mapTo[StatActor.Percentage[Media]].map { percentage =>
+                HttpEntity(s"${percentage.value * 100}% of tweets contain photo urls")
               }
             }
           }
