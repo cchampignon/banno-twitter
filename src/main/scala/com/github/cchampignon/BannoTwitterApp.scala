@@ -40,8 +40,9 @@ object Main {
       val count: ActorRef[CountActor.Command] = spawnAndWatchActor(context, CountActor(), "count")
       val emoji: ActorRef[StatActor.Command[Emoji]] = spawnAndWatchActor(context, StatActor[Emoji](count), "emoji")
       val hashtag: ActorRef[StatActor.Command[Hashtag]] = spawnAndWatchActor(context, StatActor[Hashtag](count), "hashtag")
+      val url: ActorRef[StatActor.Command[Url]] = spawnAndWatchActor(context, StatActor[Url](count), "url")
 
-      RestService.start(count, emoji, hashtag)
+      RestService.start(count, emoji, hashtag, url)
 
       Oauth.withOauthHeader(HttpRequest(uri = sameStreamUrl)) match {
         case Some(request) =>
@@ -52,6 +53,7 @@ object Main {
               TweetProcessingStream.createCountSink(count),
               TweetProcessingStream.createEmojiSink(emoji),
               TweetProcessingStream.createHashtagSink(hashtag),
+              TweetProcessingStream.createUrlSink(url),
             )(Broadcast[Tweet](_))
 
             TweetProcessingStream.build(response.entity.withoutSizeLimit.dataBytes).runWith(combinedSink)
@@ -94,6 +96,11 @@ object TweetProcessingStream {
   def createHashtagSink(hashtagActor: ActorRef[StatActor.Command[Hashtag]]): Sink[Tweet, NotUsed] =
     createActorRefSink[StatActor.Command[Hashtag]](hashtagActor, StatActor.Complete(), StatActor.Fail.apply) { tweet =>
       StatActor.AddTsFromTweet(tweet.entities.hashtags)
+    }
+
+  def createUrlSink(hashtagActor: ActorRef[StatActor.Command[Url]]): Sink[Tweet, NotUsed] =
+    createActorRefSink[StatActor.Command[Url]](hashtagActor, StatActor.Complete(), StatActor.Fail.apply) { tweet =>
+      StatActor.AddTsFromTweet(tweet.entities.urls)
     }
 
   def createActorRefSink[T](actor: ActorRef[T], onComplete: T, onFailure: Throwable => T)(f: Tweet => T): Sink[Tweet, NotUsed] = {
