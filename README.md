@@ -10,6 +10,10 @@ Load sbt with them like so
 lightweight they didn't support Scala 2.13. Roll my own or fork and publish for 2.13
 - Use the binding future that akka-http returns after starting up the http server.
 - Proper logging. Replace printlns with logging as well as more logging overall.
+- Config. Values such as how many entries in a top listing should be in a reference.conf/application.conf so that the app
+doesn't need to be recompiled to adjust those values.
+-Back pressure actors. Replace ActorSink.actorRef with ActorSink.actorRefWithBackpressure and amend the protocol to support it.
+
 
 ### Improvements
 - Follow URL shorteners. The Twitter API makes mention of having support for this, but more research would be necessary.
