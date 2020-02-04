@@ -1,5 +1,5 @@
 # Twitter Sample Stream Stats
-Consuming the Twitter sample stream with akka-htp, typed actors and spray-json written in scala.
+Consuming the Twitter sample stream with akka-http, typed actors and spray-json written in scala.
 ## Running
 The easiest way to run the app is with sbt. Twitter oauth1 credentials are required as system properties. 
 Load sbt with them like so
